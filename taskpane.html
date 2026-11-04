@@ -293,23 +293,27 @@
             <div class="header-icon">🛡️</div>
             <span class="header-title">送信前確認 (Check &amp; Send)</span>
         </div>
-        <button id="btnRefresh" class="btn-refresh">🔄 最新に更新</button>
+        <button id="btnRefresh" type="button" class="btn-refresh">🔄 最新に更新</button>
     </header>
-
     <div id="loadingView" class="loading-view">
         <div class="spinner"></div>
         <span>メール内容を解析中...</span>
     </div>
-
     <main id="mainView" class="container" style="display: none;">
         <div id="bannerSuccess" class="alert-banner alert-success" style="display: none;">
             <span class="alert-icon">✅</span>
             <div class="alert-content">
                 <strong>確認が完了しました！</strong>
-                <span>送信が許可されました。メール画面の <strong>[送信]</strong> ボタンを押してメールを送信してください。</span>
+                <span>送信が許可されました。メール画面の <strong>[送信]</strong> ボタンを押してメールを送信してください。（5分以内）</span>
             </div>
         </div>
-
+        <div id="bannerError" class="alert-banner alert-danger" style="display: none;">
+            <span class="alert-icon">❌</span>
+            <div class="alert-content">
+                <strong>確認状態の保存に失敗しました</strong>
+                <span>もう一度「確認完了」を押してください。</span>
+            </div>
+        </div>
         <div id="bannerCancel" class="alert-banner alert-warning" style="display: none;">
             <span class="alert-icon">🛑</span>
             <div class="alert-content">
@@ -317,7 +321,6 @@
                 <span>メールは下書きのまま保持されています。再編集してください。</span>
             </div>
         </div>
-
         <!-- 1. 宛先確認カード -->
         <div class="card">
             <div class="card-header">
@@ -327,7 +330,6 @@
                     <span id="recipientTotalCount">合計: 0 名</span>
                 </div>
             </div>
-
             <div id="externalAlert" class="alert-banner alert-danger" style="display: none; margin-bottom: 10px;">
                 <span class="alert-icon">⚠️</span>
                 <div class="alert-content">
@@ -335,17 +337,14 @@
                     <span id="externalAlertText">社外メールアドレスが含まれています。送信先が正しいか慎重にご確認ください。</span>
                 </div>
             </div>
-
             <div id="recipientContainer"></div>
         </div>
-
         <!-- 2. 添付ファイル確認カード -->
         <div class="card">
             <div class="card-header">
                 <span>📎 添付ファイル確認</span>
                 <span id="attachmentCountLabel">0 件</span>
             </div>
-
             <div id="attachmentAlert" class="alert-banner alert-warning" style="display: none; margin-bottom: 10px;">
                 <span class="alert-icon">⚠️</span>
                 <div class="alert-content">
@@ -353,15 +352,13 @@
                     <span>本文中に「添付」「送付」「別紙」等の記載がありますが、ファイルが添付されていません。</span>
                 </div>
             </div>
-
             <div id="attachmentContainer"></div>
         </div>
-
         <!-- 3. 件名・本文確認カード -->
         <div class="card">
             <div class="card-header">
                 <span>📝 件名・本文確認</span>
-                <button id="btnToggleBody" class="btn-refresh" style="font-size: 11px; padding: 2px 6px;">本文を隠す</button>
+                <button id="btnToggleBody" type="button" class="btn-refresh" style="font-size: 11px; padding: 2px 6px;">本文を隠す</button>
             </div>
             <div style="font-size: 11px; color: #8a8886; font-weight: 700; margin-bottom: 2px;">件名</div>
             <div id="subjectText" class="subject-text"></div>
@@ -370,8 +367,7 @@
                 <div id="bodyPreviewText" class="body-preview"></div>
             </div>
         </div>
-
-        <!-- 4. 送信前チェック項目 (Thunderbirdライク) -->
+        <!-- 4. 送信前チェック項目 -->
         <div class="card checklist-card">
             <div class="checklist-header">
                 <span>✅ 送信前チェック項目 (全項目必須)</span>
@@ -401,17 +397,14 @@
             </div>
         </div>
     </main>
-
     <footer id="footerActions" class="footer-actions" style="display: none;">
         <button id="btnCancel" type="button" class="btn btn-secondary">キャンセル (送信中止)</button>
         <button id="btnConfirm" type="button" class="btn btn-primary" disabled>確認完了 (送信許可)</button>
     </footer>
-
     <script>
-        var CONFIRMATION_KEY = "send_confirmation_timestamp";
-        function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+        var CONFIRMATION_KEY = "send_confirmation_verified";       // launchevent.js と同じ
+        var CONFIRMATION_TIME_KEY = "send_confirmation_timestamp";  // launchevent.js と同じ
         var ATTACHMENT_KEYWORDS = ["添付", "送付", "別紙", "別添", "添えて", "ご査収", "ファイル", "attached", "attachment", "enclosed", "please find"];
-
         var chkTo = document.getElementById("chkTo");
         var chkCcBcc = document.getElementById("chkCcBcc");
         var chkAttachment = document.getElementById("chkAttachment");
@@ -425,8 +418,23 @@
         var bodySection = document.getElementById("bodySection");
         var bannerSuccess = document.getElementById("bannerSuccess");
         var bannerCancel = document.getElementById("bannerCancel");
-
+        var bannerError = document.getElementById("bannerError");
         var checkboxes = [chkTo, chkCcBcc, chkAttachment, chkSubject, chkBody];
+
+        function getItem() {
+            return (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
+        }
+
+        function esc(s) {
+            return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+
+        function showBanner(target) {
+            bannerSuccess.style.display = target === "success" ? "flex" : "none";
+            bannerCancel.style.display = target === "cancel" ? "flex" : "none";
+            bannerError.style.display = target === "error" ? "flex" : "none";
+        }
 
         function checkValidation() {
             var allChecked = checkboxes.every(function(c) { return c.checked; });
@@ -439,11 +447,9 @@
                 }
             });
         }
-
         checkboxes.forEach(function(c) {
             c.addEventListener("change", checkValidation);
         });
-
         btnSelectAll.addEventListener("click", function() {
             var allChecked = checkboxes.every(function(c) { return c.checked; });
             var target = !allChecked;
@@ -451,34 +457,28 @@
             btnSelectAll.textContent = target ? "チェック解除" : "すべてチェック";
             checkValidation();
         });
-
         var isBodyVisible = true;
         btnToggleBody.addEventListener("click", function() {
             isBodyVisible = !isBodyVisible;
             bodySection.style.display = isBodyVisible ? "block" : "none";
             btnToggleBody.textContent = isBodyVisible ? "本文を隠す" : "本文を表示";
         });
-
         function extractDomain(email) {
             if (!email || email.indexOf("@") === -1) return "";
             return email.split("@")[1].trim().toLowerCase();
         }
-
         function formatSize(bytes) {
             if (!bytes || bytes <= 0) return "";
             if (bytes < 1024) return bytes + " B";
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
             return (bytes / (1024 * 1024)).toFixed(1) + " MB";
         }
-
         function loadMailData() {
             document.getElementById("loadingView").style.display = "flex";
             document.getElementById("mainView").style.display = "none";
             document.getElementById("footerActions").style.display = "none";
-            bannerSuccess.style.display = "none";
-            bannerCancel.style.display = "none";
-
-            var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
+            showBanner(null);
+            var item = getItem();
             if (!item) {
                 // ブラウザ直接アクセス時のダミープレビュー
                 renderData({
@@ -494,53 +494,43 @@
                 });
                 return;
             }
-
             var userEmail = Office.context.mailbox.userProfile ? Office.context.mailbox.userProfile.emailAddress : "";
             var myDomain = extractDomain(userEmail);
-
             function getRecipients(type) {
                 return new Promise(function(resolve) {
                     item[type].getAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || []) : []); });
                 });
             }
-
             function getAttachments() {
                 return new Promise(function(resolve) {
                     if (!item.getAttachmentsAsync) { resolve([]); return; }
                     item.getAttachmentsAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || []) : []); });
                 });
             }
-
             function getSubject() {
                 return new Promise(function(resolve) {
                     item.subject.getAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || "") : ""); });
                 });
             }
-
             function getBody() {
                 return new Promise(function(resolve) {
                     item.body.getAsync(Office.CoercionType.Text, function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || "") : ""); });
                 });
             }
-
             Promise.all([getRecipients("to"), getRecipients("cc"), getRecipients("bcc"), getAttachments(), getSubject(), getBody()])
             .then(function(results) {
-                var toList = results[0].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
-                var ccList = results[1].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
-                var bccList = results[2].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
+                function mapR(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; }
+                var toList = results[0].map(mapR);
+                var ccList = results[1].map(mapR);
+                var bccList = results[2].map(mapR);
                 var attachments = results[3];
                 var subject = results[4];
                 var body = results[5];
-
                 var allRecipients = toList.concat(ccList).concat(bccList);
                 var externalList = allRecipients.filter(function(r) { return r.isExternal; });
-                var hasExternal = externalList.length > 0;
-
                 var lowerBody = body.toLowerCase();
                 var hasKeyword = ATTACHMENT_KEYWORDS.some(function(kw) { return lowerBody.indexOf(kw.toLowerCase()) !== -1; });
                 var validAttachments = attachments.filter(function(a) { return !a.isInline; });
-                var potentialMissing = (validAttachments.length === 0) && hasKeyword;
-
                 renderData({
                     to: toList,
                     cc: ccList,
@@ -548,24 +538,19 @@
                     subject: subject,
                     bodyPreview: body.trim(),
                     attachments: attachments,
-                    hasExternal: hasExternal,
+                    hasExternal: externalList.length > 0,
                     externalCount: externalList.length,
-                    potentialMissingAttachment: potentialMissing
+                    potentialMissingAttachment: (validAttachments.length === 0) && hasKeyword
                 });
             });
         }
-
         function renderData(data) {
             document.getElementById("loadingView").style.display = "none";
             document.getElementById("mainView").style.display = "flex";
             document.getElementById("footerActions").style.display = "flex";
-
             var totalRecipients = data.to.length + data.cc.length + data.bcc.length;
             document.getElementById("recipientTotalCount").textContent = "合計: " + totalRecipients + " 名";
-
-            var badgeMultiple = document.getElementById("badgeMultiple");
-            badgeMultiple.style.display = totalRecipients >= 3 ? "inline-block" : "none";
-
+            document.getElementById("badgeMultiple").style.display = totalRecipients >= 3 ? "inline-block" : "none";
             var extAlert = document.getElementById("externalAlert");
             if (data.hasExternal) {
                 extAlert.style.display = "flex";
@@ -573,7 +558,6 @@
             } else {
                 extAlert.style.display = "none";
             }
-
             var recContainer = document.getElementById("recipientContainer");
             recContainer.innerHTML = "";
             function renderGroup(title, list) {
@@ -600,12 +584,9 @@
                 renderGroup("CC", data.cc);
                 renderGroup("BCC", data.bcc);
             }
-
-            var attAlert = document.getElementById("attachmentAlert");
-            attAlert.style.display = data.potentialMissingAttachment ? "flex" : "none";
+            document.getElementById("attachmentAlert").style.display = data.potentialMissingAttachment ? "flex" : "none";
             var validAtts = (data.attachments || []).filter(function(a) { return !a.isInline; });
             document.getElementById("attachmentCountLabel").textContent = validAtts.length + " 件";
-
             var attContainer = document.getElementById("attachmentContainer");
             if (validAtts.length === 0) {
                 attContainer.innerHTML = '<div class="empty-hint">' + (data.potentialMissingAttachment ? "ファイルが添付されていません（添付忘れ注意）。" : "添付ファイルはありません。") + '</div>';
@@ -615,53 +596,79 @@
                 validAtts.forEach(function(a) {
                     var aDiv = document.createElement("div");
                     aDiv.className = "attachment-item";
-                    aDiv.innerHTML = '<span style="font-size:16px;">📄</span><span class="attachment-name">' + esc(a.name) + '</span><span class="attachment-size">' + esc(formatSize(a.size)) + '</span>';
+                    aDiv.innerHTML = '<span style="font-size:16px;">📄</span><span class="attachment-name">' + esc(a.name) + '</span><span class="attachment-size">' + formatSize(a.size) + '</span>';
                     attListDiv.appendChild(aDiv);
                 });
                 attContainer.innerHTML = "";
                 attContainer.appendChild(attListDiv);
             }
-
             var subj = data.subject || "";
             document.getElementById("subjectText").textContent = subj.trim() ? subj : "（件名なし - 無題）";
             document.getElementById("bodyPreviewText").textContent = data.bodyPreview ? data.bodyPreview : "（本文は空です）";
         }
-
         btnRefresh.addEventListener("click", loadMailData);
 
-        // sessionData へ確認時刻を保存 / 解除
-        function writeConfirmTime(value, onOk, onFail) {
-            var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
-            if (!item) { onOk(); return; }   // ブラウザ直接アクセス時のプレビュー
-            if (!item.sessionData || !item.sessionData.setAsync) { onFail("このOutlookは sessionData（要件セット1.14）に未対応です。"); return; }
-            item.sessionData.setAsync(CONFIRMATION_KEY, String(value), function (r) {
-                if (r.status === Office.AsyncResultStatus.Succeeded) { onOk(); }
-                else { onFail((r.error && r.error.message) || "保存に失敗しました。"); }
+        /* ---------- 確認状態の保存 ---------- */
+        // 【修正】sessionData に保存（送信時チェックがすぐ読める・メイン）
+        function saveSessionData(item, ts) {
+            return new Promise(function(resolve) {
+                try {
+                    if (!item.sessionData) { resolve(false); return; }
+                    item.sessionData.setAsync(CONFIRMATION_TIME_KEY, String(ts), function(r) {
+                        resolve(r.status === Office.AsyncResultStatus.Succeeded);
+                    });
+                } catch (e) { resolve(false); }
+            });
+        }
+        // customProperties に保存（予備）
+        function saveCustomProps(item, verified, ts) {
+            return new Promise(function(resolve) {
+                try {
+                    item.loadCustomPropertiesAsync(function(r) {
+                        if (r.status !== Office.AsyncResultStatus.Succeeded) { resolve(false); return; }
+                        var props = r.value;
+                        props.set(CONFIRMATION_KEY, verified);
+                        props.set(CONFIRMATION_TIME_KEY, ts);
+                        props.saveAsync(function(s) { resolve(s.status === Office.AsyncResultStatus.Succeeded); });
+                    });
+                } catch (e) { resolve(false); }
             });
         }
 
         // 確認完了（送信許可）
         btnConfirm.addEventListener("click", function() {
             if (btnConfirm.disabled) return;
-            writeConfirmTime(Date.now(), function() {
-                bannerSuccess.style.display = "flex";
-                bannerCancel.style.display = "none";
+            var item = getItem();
+            if (!item) {
+                showBanner("success");
                 btnConfirm.textContent = "✓ 確認完了 (送信可能)";
-            }, function(msg) {
-                btnConfirm.textContent = "保存に失敗: もう一度押してください";
-                console.error(msg);
+                return;
+            }
+            btnConfirm.disabled = true;
+            var ts = Date.now();
+            Promise.all([saveSessionData(item, ts), saveCustomProps(item, true, ts)]).then(function(res) {
+                if (res[0] || res[1]) {
+                    showBanner("success");
+                    btnConfirm.textContent = "✓ 確認完了 (送信可能)";
+                } else {
+                    showBanner("error");
+                }
+                checkValidation();
             });
         });
 
         // キャンセル（送信中止）
         btnCancel.addEventListener("click", function() {
             checkboxes.forEach(function(c) { c.checked = false; });
+            btnSelectAll.textContent = "すべてチェック";
             checkValidation();
-            writeConfirmTime(0, function() {
-                bannerCancel.style.display = "flex";
-                bannerSuccess.style.display = "none";
-                btnConfirm.textContent = "確認完了 (送信許可)";
-            }, function(msg) { console.error(msg); });
+            var item = getItem();
+            if (item) {
+                try { if (item.sessionData) item.sessionData.removeAsync(CONFIRMATION_TIME_KEY, function() {}); } catch (e) {}
+                saveCustomProps(item, false, 0);
+            }
+            showBanner("cancel");
+            btnConfirm.textContent = "確認完了 (送信許可)";
         });
 
         if (typeof Office !== "undefined" && Office.onReady) {

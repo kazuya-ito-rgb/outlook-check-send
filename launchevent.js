@@ -1,10 +1,14 @@
 /* global Office */
+/*
+ * 送信時チェック (OnMessageSend / Smart Alerts)
+ * タスクペインで「確認完了」を押した時刻を読み取り、5分以内なら送信を許可する。
+ * 読み取り先: sessionData（メイン） / customProperties（予備）
+ */
 var CONFIRMATION_KEY = "send_confirmation_verified";
 var CONFIRMATION_TIME_KEY = "send_confirmation_timestamp";
 var VALID_MS = 5 * 60 * 1000;   // 有効期限 5分
 var TIMEOUT_MS = 3000;          // 読み込み待ちの上限 3秒
 
-// タイムアウト付きで非同期処理を実行（固まり防止）
 function withTimeout(fn) {
   return new Promise(function (resolve) {
     var done = false;
@@ -21,7 +25,6 @@ function isFresh(ts) {
   return !!ts && !isNaN(t) && (Date.now() - t) < VALID_MS;
 }
 
-// sessionData から確認時刻を読む
 function readSessionData(item) {
   return withTimeout(function (finish) {
     if (!item.sessionData) { finish(false); return; }
@@ -31,7 +34,6 @@ function readSessionData(item) {
   });
 }
 
-// customProperties から確認状態を読む（現行タスクペイン互換）
 function readCustomProps(item) {
   return withTimeout(function (finish) {
     item.loadCustomPropertiesAsync(function (r) {
@@ -56,7 +58,7 @@ function onMessageSendHandler(event) {
           allowEvent: false,
           errorMessage: "【誤送信防止：送信前確認が完了していません】\n" +
             "リボンの「送信前確認画面」を開き、5項目を確認してチェックを入れ、" +
-            "「確認完了 (送信許可)」を押してから再度送信してください。（有効期限5分）",
+            "「確認完了 (送信可能)」を押してから再度送信してください。（有効期限5分）",
           cancelLabel: "メール作成に戻る"
         });
       }
