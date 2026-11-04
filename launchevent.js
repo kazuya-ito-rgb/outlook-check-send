@@ -3,11 +3,12 @@
 // 確認済みフラグは item.sessionData（要件セット1.14）に「確認時刻(ms)」として保存する
 var CONFIRMATION_KEY = "send_confirmation_timestamp";
 var VALID_MS = 5 * 60 * 1000;      // 確認の有効期限: 5分
-var CHECK_TIMEOUT_MS = 4000;       // 確認処理の打ち切り時間（応答がない場合に必ず結果を返す）
+var CHECK_TIMEOUT_MS = 4000;
+var CODE_VERSION = "v2";       // 確認処理の打ち切り時間（応答がない場合に必ず結果を返す）
 
 var BLOCK_MESSAGE =
     "【誤送信防止：送信前確認が完了していません】\n\n" +
-    "リボンの「送信前確認画面」を開き、5項目にチェックして「確認完了 (送信許可)」を押してから、再度「送信」してください。";
+    "リボンの「送信前確認画面」を開き、5項目にチェックして「確認完了 (送信許可)」を押してから、再度「送信」してください。\n(code " + CODE_VERSION + ")";
 
 /**
  * 確認時刻を読み出す。取得できなければ null を返す。
@@ -49,7 +50,7 @@ function onMessageSendHandler(event) {
     timer = setTimeout(function () {
         finish({
             allowEvent: false,
-            errorMessage: "送信前確認の状態を取得できませんでした。もう一度「送信」を押してください。繰り返す場合は「送信前確認画面」で再度「確認完了」を押してください。",
+            errorMessage: "送信前確認の状態を取得できませんでした。もう一度「送信」を押してください。繰り返す場合は「送信前確認画面」で再度「確認完了」を押してください。\n(code " + CODE_VERSION + ")",
             cancelLabel: "メール作成に戻る"
         });
     }, CHECK_TIMEOUT_MS);
@@ -68,7 +69,7 @@ function onMessageSendHandler(event) {
             }
         });
     } catch (err) {
-        finish({ allowEvent: false, errorMessage: "送信確認処理中にエラーが発生しました。もう一度お試しください。" });
+        finish({ allowEvent: false, errorMessage: "送信確認処理中にエラーが発生しました。もう一度お試しください。(code " + CODE_VERSION + ")" });
     }
 }
 
