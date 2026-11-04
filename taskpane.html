@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>送信前確認 (Check & Send)</title>
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="src/taskpane/taskpane.css" />
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header class="header">
+        <div class="header-title-container">
+            <div class="header-icon">🛡️</div>
+            <span class="header-title">送信前確認 (Check & Send)</span>
+        </div>
+        <button id="btnRefresh" class="refresh-button">🔄 最新情報に更新</button>
+    </header>
+
+    <!-- ローディング -->
+    <div id="loadingView" class="loading-container">
+        <div class="spinner"></div>
+        <span>メール内容を解析中...</span>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <main id="mainView" class="main-container" style="display: none;">
+        <!-- 成功・中止メッセージ -->
+        <div id="bannerSuccess" class="alert-banner alert-success" style="display: none;">
+            <span class="alert-icon">✅</span>
+            <div class="alert-content">
+                <strong>確認が完了しました！</strong>
+                <span>送信が許可されました。メール作成画面の <strong>[送信]</strong> ボタンを押して送信してください。</span>
+            </div>
+        </div>
+
+        <div id="bannerCancel" class="alert-banner alert-warning" style="display: none;">
+            <span class="alert-icon">🛑</span>
+            <div class="alert-content">
+                <strong>送信を中止しました</strong>
+                <span>確認状態をリセットしました。メールは下書きのまま保持されています。</span>
+            </div>
+        </div>
+
+        <!-- 1. 宛先確認カード -->
+        <div class="card">
+            <div class="card-title">
+                <span>👥 宛先確認</span>
+                <span id="recipientTotalCount">合計: 0 名</span>
+            </div>
+            <div id="externalAlert" class="alert-banner alert-danger" style="display: none; margin-bottom: 10px;">
+                <span class="alert-icon">⚠️</span>
+                <div class="alert-content">
+                    <strong>社外ドメイン宛てが含まれています</strong>
+                    <span id="externalAlertText">社外メールアドレスが含まれています。慎重にご確認ください。</span>
+                </div>
+            </div>
+            <div id="recipientContainer"></div>
+        </div>
+
+        <!-- 2. 添付ファイル確認カード -->
+        <div class="card">
+            <div class="card-title">
+                <span>📎 添付ファイル確認</span>
+                <span id="attachmentCountLabel">0 件</span>
+            </div>
+            <div id="attachmentAlert" class="alert-banner alert-warning" style="display: none; margin-bottom: 10px;">
+                <span class="alert-icon">⚠️</span>
+                <div class="alert-content">
+                    <strong>添付漏れの可能性があります</strong>
+                    <span>本文中に「添付」「送付」等の記載がありますが、ファイルが添付されていません。</span>
+                </div>
+            </div>
+            <div id="attachmentContainer"></div>
+        </div>
+
+        <!-- 3. 件名・本文カード -->
+        <div class="card">
+            <div class="card-title">
+                <span>📝 件名・本文確認</span>
+                <button id="btnToggleBody" class="refresh-button" style="font-size: 11px; padding: 2px 6px;">本文を隠す</button>
+            </div>
+            <div style="font-size: 11px; color: #8a8886; font-weight: 700; margin-bottom: 2px;">件名</div>
+            <div id="subjectText" class="subject-text"></div>
+            <div id="bodySection" style="margin-top: 8px;">
+                <div style="font-size: 11px; color: #8a8886; font-weight: 700; margin-bottom: 2px;">本文プレビュー</div>
+                <div id="bodyPreviewText" class="body-preview"></div>
+            </div>
+        </div>
+
+        <!-- 4. チェックリストカード -->
+        <div class="card checklist-card">
+            <div class="checklist-title">
+                <span>✅ 送信前チェック項目 (必須)</span>
+                <button id="btnSelectAll" type="button" class="refresh-button" style="margin-left: auto; font-size: 11px; padding: 2px 6px;">すべてチェック</button>
+            </div>
+            <div class="checklist-items">
+                <label class="check-label">
+                    <input type="checkbox" id="chkTo" class="chk-item" />
+                    <span class="check-text">宛先を確認しました</span>
+                </label>
+                <label class="check-label">
+                    <input type="checkbox" id="chkCcBcc" class="chk-item" />
+                    <span class="check-text">CC/BCCを確認しました</span>
+                </label>
+                <label class="check-label">
+                    <input type="checkbox" id="chkAttachment" class="chk-item" />
+                    <span class="check-text">添付ファイルを確認しました</span>
+                </label>
+                <label class="check-label">
+                    <input type="checkbox" id="chkSubject" class="chk-item" />
+                    <span class="check-text">件名を確認しました</span>
+                </label>
+                <label class="check-label">
+                    <input type="checkbox" id="chkBody" class="chk-item" />
+                    <span class="check-text">本文を確認しました</span>
+                </label>
+            </div>
+        </div>
+    </main>
+
+    <!-- 固定フッター -->
+    <footer id="footerActions" class="footer-actions" style="display: none;">
+        <button id="btnCancel" type="button" class="btn btn-secondary">キャンセル (送信中止)</button>
+        <button id="btnConfirm" type="button" class="btn btn-primary" disabled>確認完了 (送信許可)</button>
+    </footer>
+
+    <!-- スクリプト -->
+    <script>
+        var CONFIRMATION_KEY = "send_confirmation_verified";
+        var CONFIRMATION_TIME_KEY = "send_confirmation_timestamp";
+        var ATTACHMENT_KEYWORDS = ["添付", "送付", "別紙", "別添", "添えて", "ご査収", "ファイル", "attached", "attachment", "enclosed"];
+
+        var chkTo = document.getElementById("chkTo");
+        var chkCcBcc = document.getElementById("chkCcBcc");
+        var chkAttachment = document.getElementById("chkAttachment");
+        var chkSubject = document.getElementById("chkSubject");
+        var chkBody = document.getElementById("chkBody");
+        var btnConfirm = document.getElementById("btnConfirm");
+        var btnCancel = document.getElementById("btnCancel");
+        var btnRefresh = document.getElementById("btnRefresh");
+        var btnSelectAll = document.getElementById("btnSelectAll");
+        var btnToggleBody = document.getElementById("btnToggleBody");
+        var bodySection = document.getElementById("bodySection");
+        var bannerSuccess = document.getElementById("bannerSuccess");
+        var bannerCancel = document.getElementById("bannerCancel");
+
+        var checkboxes = [chkTo, chkCcBcc, chkAttachment, chkSubject, chkBody];
+
+        function checkValidation() {
+            var allChecked = checkboxes.every(function(c) { return c.checked; });
+            btnConfirm.disabled = !allChecked;
+            checkboxes.forEach(function(c) {
+                if (c.checked) {
+                    c.parentElement.classList.add("checked");
+                } else {
+                    c.parentElement.classList.remove("checked");
+                }
+            });
+        }
+
+        checkboxes.forEach(function(c) {
+            c.addEventListener("change", checkValidation);
+        });
+
+        btnSelectAll.addEventListener("click", function() {
+            var allChecked = checkboxes.every(function(c) { return c.checked; });
+            var target = !allChecked;
+            checkboxes.forEach(function(c) { c.checked = target; });
+            btnSelectAll.textContent = target ? "チェック解除" : "すべてチェック";
+            checkValidation();
+        });
+
+        var isBodyVisible = true;
+        btnToggleBody.addEventListener("click", function() {
+            isBodyVisible = !isBodyVisible;
+            bodySection.style.display = isBodyVisible ? "block" : "none";
+            btnToggleBody.textContent = isBodyVisible ? "本文を隠す" : "本文を表示";
+        });
+
+        function extractDomain(email) {
+            if (!email || email.indexOf("@") === -1) return "";
+            return email.split("@")[1].trim().toLowerCase();
+        }
+
+        function formatSize(bytes) {
+            if (!bytes || bytes <= 0) return "";
+            if (bytes < 1024) return bytes + " B";
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+            return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+        }
+
+        function loadMailData() {
+            document.getElementById("loadingView").style.display = "flex";
+            document.getElementById("mainView").style.display = "none";
+            document.getElementById("footerActions").style.display = "none";
+            bannerSuccess.style.display = "none";
+            bannerCancel.style.display = "none";
+
+            var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
+            if (!item) {
+                // ブラウザ単体テスト時のダミーデータ
+                renderData({
+                    to: [{ displayName: "山田 太郎", emailAddress: "taro.yamada@example.com", isExternal: true }],
+                    cc: [{ displayName: "社内 課長", emailAddress: "kachou@mycompany.co.jp", isExternal: false }],
+                    bcc: [],
+                    subject: "業務連絡とお見積書の件",
+                    bodyPreview: "お世話になっております。本件の資料を添付にて送付いたしますのでご査収ください。",
+                    attachments: [],
+                    hasExternal: true,
+                    externalCount: 1,
+                    potentialMissingAttachment: true
+                });
+                return;
+            }
+
+            var userEmail = Office.context.mailbox.userProfile ? Office.context.mailbox.userProfile.emailAddress : "";
+            var myDomain = extractDomain(userEmail);
+
+            function getRecipients(type) {
+                return new Promise(function(resolve) {
+                    item[type].getAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || []) : []); });
+                });
+            }
+
+            function getAttachments() {
+                return new Promise(function(resolve) {
+                    if (!item.getAttachmentsAsync) { resolve([]); return; }
+                    item.getAttachmentsAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || []) : []); });
+                });
+            }
+
+            function getSubject() {
+                return new Promise(function(resolve) {
+                    item.subject.getAsync(function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || "") : ""); });
+                });
+            }
+
+            function getBody() {
+                return new Promise(function(resolve) {
+                    item.body.getAsync(Office.CoercionType.Text, function(r) { resolve(r.status === Office.AsyncResultStatus.Succeeded ? (r.value || "") : ""); });
+                });
+            }
+
+            Promise.all([getRecipients("to"), getRecipients("cc"), getRecipients("bcc"), getAttachments(), getSubject(), getBody()])
+            .then(function(results) {
+                var toList = results[0].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
+                var ccList = results[1].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
+                var bccList = results[2].map(function(r) { return { displayName: r.displayName || r.emailAddress, emailAddress: r.emailAddress, isExternal: extractDomain(r.emailAddress) !== myDomain }; });
+                var attachments = results[3];
+                var subject = results[4];
+                var body = results[5];
+
+                var allRecipients = toList.concat(ccList).concat(bccList);
+                var externalList = allRecipients.filter(function(r) { return r.isExternal; });
+                var hasExternal = externalList.length > 0;
+
+                var lowerBody = body.toLowerCase();
+                var hasKeyword = ATTACHMENT_KEYWORDS.some(function(kw) { return lowerBody.indexOf(kw.toLowerCase()) !== -1; });
+                var validAttachments = attachments.filter(function(a) { return !a.isInline; });
+                var potentialMissing = (validAttachments.length === 0) && hasKeyword;
+
+                renderData({
+                    to: toList,
+                    cc: ccList,
+                    bcc: bccList,
+                    subject: subject,
+                    bodyPreview: body.trim(),
+                    attachments: attachments,
+                    hasExternal: hasExternal,
+                    externalCount: externalList.length,
+                    potentialMissingAttachment: potentialMissing
+                });
+            });
+        }
+
+        function renderData(data) {
+            document.getElementById("loadingView").style.display = "none";
+            document.getElementById("mainView").style.display = "flex";
+            document.getElementById("footerActions").style.display = "flex";
+
+            // 宛先
+            var totalRecipients = data.to.length + data.cc.length + data.bcc.length;
+            document.getElementById("recipientTotalCount").textContent = "合計: " + totalRecipients + " 名";
+
+            var extAlert = document.getElementById("externalAlert");
+            if (data.hasExternal) {
+                extAlert.style.display = "flex";
+                document.getElementById("externalAlertText").textContent = "社外宛先が " + data.externalCount + " 件含まれています。";
+            } else {
+                extAlert.style.display = "none";
+            }
+
+            var recContainer = document.getElementById("recipientContainer");
+            recContainer.innerHTML = "";
+            function renderGroup(title, list) {
+                if (!list || list.length === 0) return;
+                var groupDiv = document.createElement("div");
+                groupDiv.className = "recipient-group";
+                groupDiv.innerHTML = '<span class="recipient-type-label">' + title + ' (' + list.length + ')</span>';
+                var listDiv = document.createElement("div");
+                listDiv.className = "recipient-list";
+                list.forEach(function(r) {
+                    var itemDiv = document.createElement("div");
+                    itemDiv.className = "recipient-item" + (r.isExternal ? " is-external" : "");
+                    itemDiv.innerHTML = '<div class="recipient-info"><span class="recipient-name">' + r.displayName + '</span><span class="recipient-email">' + r.emailAddress + '</span></div>' +
+                        (r.isExternal ? '<span class="badge-external">社外</span>' : '<span class="badge-internal">社内</span>');
+                    listDiv.appendChild(itemDiv);
+                });
+                groupDiv.appendChild(listDiv);
+                recContainer.appendChild(groupDiv);
+            }
+            if (totalRecipients === 0) {
+                recContainer.innerHTML = '<div class="no-attachments">宛先が指定されていません。</div>';
+            } else {
+                renderGroup("TO (宛先)", data.to);
+                renderGroup("CC", data.cc);
+                renderGroup("BCC", data.bcc);
+            }
+
+            // 添付
+            var attAlert = document.getElementById("attachmentAlert");
+            attAlert.style.display = data.potentialMissingAttachment ? "flex" : "none";
+            var validAtts = (data.attachments || []).filter(function(a) { return !a.isInline; });
+            document.getElementById("attachmentCountLabel").textContent = validAtts.length + " 件";
+
+            var attContainer = document.getElementById("attachmentContainer");
+            if (validAtts.length === 0) {
+                attContainer.innerHTML = '<div class="no-attachments">' + (data.potentialMissingAttachment ? "ファイルが添付されていません。" : "添付ファイルはありません。") + '</div>';
+            } else {
+                var attListDiv = document.createElement("div");
+                attListDiv.className = "attachment-list";
+                validAtts.forEach(function(a) {
+                    var aDiv = document.createElement("div");
+                    aDiv.className = "attachment-item";
+                    aDiv.innerHTML = '<span class="attachment-icon">📄</span><span class="attachment-name">' + a.name + '</span><span class="attachment-size">' + formatSize(a.size) + '</span>';
+                    attListDiv.appendChild(aDiv);
+                });
+                attContainer.innerHTML = "";
+                attContainer.appendChild(attListDiv);
+            }
+
+            // 件名・本文
+            var subj = data.subject || "";
+            document.getElementById("subjectText").textContent = subj.trim() ? subj : "（件名なし）";
+            document.getElementById("bodyPreviewText").textContent = data.bodyPreview ? data.bodyPreview : "（本文は空です）";
+        }
+
+        btnRefresh.addEventListener("click", loadMailData);
+
+        // 送信許可処理
+        btnConfirm.addEventListener("click", function() {
+            if (btnConfirm.disabled) return;
+            var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
+            if (item) {
+                item.loadCustomPropertiesAsync(function(r) {
+                    if (r.status === Office.AsyncResultStatus.Succeeded) {
+                        var props = r.value;
+                        props.set(CONFIRMATION_KEY, true);
+                        props.set(CONFIRMATION_TIME_KEY, Date.now());
+                        props.saveAsync(function() {
+                            bannerSuccess.style.display = "flex";
+                            bannerCancel.style.display = "none";
+                            btnConfirm.textContent = "✓ 確認完了済み";
+                        });
+                    }
+                });
+            } else {
+                bannerSuccess.style.display = "flex";
+                bannerCancel.style.display = "none";
+                btnConfirm.textContent = "✓ 確認完了済み";
+            }
+        });
+
+        // 送信中止処理
+        btnCancel.addEventListener("click", function() {
+            checkboxes.forEach(function(c) { c.checked = false; });
+            checkValidation();
+            var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
+            if (item) {
+                item.loadCustomPropertiesAsync(function(r) {
+                    if (r.status === Office.AsyncResultStatus.Succeeded) {
+                        var props = r.value;
+                        props.set(CONFIRMATION_KEY, false);
+                        props.set(CONFIRMATION_TIME_KEY, 0);
+                        props.saveAsync(function() {
+                            bannerCancel.style.display = "flex";
+                            bannerSuccess.style.display = "none";
+                            btnConfirm.textContent = "確認完了 (送信許可)";
+                        });
+                    }
+                });
+            } else {
+                bannerCancel.style.display = "flex";
+                bannerSuccess.style.display = "none";
+                btnConfirm.textContent = "確認完了 (送信許可)";
+            }
+        });
+
+        if (typeof Office !== "undefined" && Office.onReady) {
+            Office.onReady(function() {
+                loadMailData();
+            });
+        } else {
+            loadMailData();
+        }
+    </script>
+</body>
+</html>
