@@ -4,85 +4,364 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>送信前確認 (Check & Send)</title>
+    <title>送信前確認 (Check &amp; Send)</title>
+    <!-- Office.js CDN -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="src/taskpane/taskpane.css" />
+    <style>
+        :root {
+            --primary: #0078d4;
+            --primary-hover: #106ebe;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --border: #edebe9;
+            --text: #323130;
+            --text-sub: #605e5c;
+            --danger: #d13438;
+            --danger-bg: #fde7e9;
+            --warning: #d83b01;
+            --warning-bg: #fff4ce;
+            --success: #107c41;
+            --success-bg: #dff6dd;
+            --font: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Meiryo, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font);
+            background-color: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.5;
+            padding-bottom: 80px;
+        }
+        .header {
+            background-color: #ffffff;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .header-title-box { display: flex; align-items: center; gap: 8px; }
+        .header-icon {
+            width: 24px; height: 24px;
+            background-color: var(--primary);
+            color: #ffffff;
+            border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px;
+        }
+        .header-title { font-size: 14px; font-weight: 700; color: var(--text); }
+        .btn-refresh {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            color: var(--text-sub);
+            transition: all 0.2s;
+        }
+        .btn-refresh:hover { background-color: #f3f2f1; color: var(--text); }
+        .container {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .alert-banner {
+            border-radius: 4px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .alert-danger { background-color: var(--danger-bg); border-left: 4px solid var(--danger); color: #a80000; }
+        .alert-warning { background-color: var(--warning-bg); border-left: 4px solid var(--warning); color: #3b3a39; }
+        .alert-success { background-color: var(--success-bg); border-left: 4px solid var(--success); color: var(--success); }
+        .alert-icon { font-size: 16px; flex-shrink: 0; }
+        .alert-content strong { display: block; margin-bottom: 2px; }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card-header {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .recipient-group { margin-bottom: 8px; }
+        .recipient-group:last-child { margin-bottom: 0; }
+        .recipient-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #8a8886;
+            margin-bottom: 4px;
+            display: block;
+        }
+        .recipient-list { display: flex; flex-direction: column; gap: 4px; }
+        .recipient-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 12px;
+            border: 1px solid #edebe9;
+        }
+        .recipient-item.is-external {
+            background-color: #fff0f1;
+            border-color: #f9d9db;
+        }
+        .recipient-info {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin-right: 8px;
+        }
+        .recipient-name {
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .recipient-email {
+            font-size: 11px;
+            color: var(--text-sub);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .badge-external {
+            background-color: var(--danger);
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .badge-internal {
+            background-color: #e1dfdd;
+            color: #323130;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .badge-multiple {
+            background-color: #fff4ce;
+            color: #797673;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #fce100;
+        }
+        .attachment-list { display: flex; flex-direction: column; gap: 6px; }
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background-color: #faf9f8;
+            border: 1px solid #f3f2f1;
+            border-radius: 4px;
+        }
+        .attachment-name {
+            font-weight: 500;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .attachment-size { font-size: 11px; color: var(--text-sub); }
+        .subject-text { font-weight: 600; font-size: 13px; color: var(--text); word-break: break-all; }
+        .body-preview {
+            margin-top: 6px;
+            padding: 8px;
+            background-color: #faf9f8;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #484644;
+            white-space: pre-wrap;
+            max-height: 100px;
+            overflow-y: auto;
+            border: 1px solid #edebe9;
+        }
+        .checklist-card {
+            border: 2px solid var(--primary);
+            background-color: #ffffff;
+        }
+        .checklist-header {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .checklist-items { display: flex; flex-direction: column; gap: 8px; }
+        .check-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            padding: 6px 8px;
+            border-radius: 4px;
+            transition: background-color 0.15s;
+        }
+        .check-label:hover { background-color: #f3f2f1; }
+        .check-label input[type="checkbox"] {
+            width: 17px;
+            height: 17px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+        .check-text { font-size: 13px; font-weight: 500; }
+        .check-label.checked .check-text { color: #000000; font-weight: 600; }
+        .footer-actions {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background-color: #ffffff;
+            border-top: 1px solid var(--border);
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+            z-index: 20;
+        }
+        .btn {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-primary { background-color: var(--primary); color: #ffffff; }
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+        .btn-primary:disabled { background-color: #c8c6c4; cursor: not-allowed; opacity: 0.8; }
+        .btn-secondary { background-color: #ffffff; color: var(--text); border-color: #8a8886; }
+        .btn-secondary:hover { background-color: #f3f2f1; }
+        .loading-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            gap: 12px;
+            color: var(--text-sub);
+        }
+        .spinner {
+            width: 28px; height: 28px;
+            border: 3px solid #edebe9;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty-hint { color: var(--text-sub); font-size: 12px; font-style: italic; padding: 4px 0; }
+    </style>
 </head>
 <body>
-    <!-- ヘッダー -->
     <header class="header">
-        <div class="header-title-container">
+        <div class="header-title-box">
             <div class="header-icon">🛡️</div>
-            <span class="header-title">送信前確認 (Check & Send)</span>
+            <span class="header-title">送信前確認 (Check &amp; Send)</span>
         </div>
-        <button id="btnRefresh" class="refresh-button">🔄 最新情報に更新</button>
+        <button id="btnRefresh" class="btn-refresh">🔄 最新に更新</button>
     </header>
 
-    <!-- ローディング -->
-    <div id="loadingView" class="loading-container">
+    <div id="loadingView" class="loading-view">
         <div class="spinner"></div>
         <span>メール内容を解析中...</span>
     </div>
 
-    <!-- メインコンテンツ -->
-    <main id="mainView" class="main-container" style="display: none;">
-        <!-- 成功・中止メッセージ -->
+    <main id="mainView" class="container" style="display: none;">
         <div id="bannerSuccess" class="alert-banner alert-success" style="display: none;">
             <span class="alert-icon">✅</span>
             <div class="alert-content">
                 <strong>確認が完了しました！</strong>
-                <span>送信が許可されました。メール作成画面の <strong>[送信]</strong> ボタンを押して送信してください。</span>
+                <span>送信が許可されました。メール画面の <strong>[送信]</strong> ボタンを押してメールを送信してください。</span>
             </div>
         </div>
 
         <div id="bannerCancel" class="alert-banner alert-warning" style="display: none;">
             <span class="alert-icon">🛑</span>
             <div class="alert-content">
-                <strong>送信を中止しました</strong>
-                <span>確認状態をリセットしました。メールは下書きのまま保持されています。</span>
+                <strong>送信確認をリセットしました</strong>
+                <span>メールは下書きのまま保持されています。再編集してください。</span>
             </div>
         </div>
 
         <!-- 1. 宛先確認カード -->
         <div class="card">
-            <div class="card-title">
+            <div class="card-header">
                 <span>👥 宛先確認</span>
-                <span id="recipientTotalCount">合計: 0 名</span>
+                <div>
+                    <span id="badgeMultiple" class="badge-multiple" style="display: none; margin-right: 6px;">複数宛先注意</span>
+                    <span id="recipientTotalCount">合計: 0 名</span>
+                </div>
             </div>
+
             <div id="externalAlert" class="alert-banner alert-danger" style="display: none; margin-bottom: 10px;">
                 <span class="alert-icon">⚠️</span>
                 <div class="alert-content">
                     <strong>社外ドメイン宛てが含まれています</strong>
-                    <span id="externalAlertText">社外メールアドレスが含まれています。慎重にご確認ください。</span>
+                    <span id="externalAlertText">社外メールアドレスが含まれています。送信先が正しいか慎重にご確認ください。</span>
                 </div>
             </div>
+
             <div id="recipientContainer"></div>
         </div>
 
         <!-- 2. 添付ファイル確認カード -->
         <div class="card">
-            <div class="card-title">
+            <div class="card-header">
                 <span>📎 添付ファイル確認</span>
                 <span id="attachmentCountLabel">0 件</span>
             </div>
+
             <div id="attachmentAlert" class="alert-banner alert-warning" style="display: none; margin-bottom: 10px;">
                 <span class="alert-icon">⚠️</span>
                 <div class="alert-content">
-                    <strong>添付漏れの可能性があります</strong>
-                    <span>本文中に「添付」「送付」等の記載がありますが、ファイルが添付されていません。</span>
+                    <strong>添付ファイル漏れの可能性があります</strong>
+                    <span>本文中に「添付」「送付」「別紙」等の記載がありますが、ファイルが添付されていません。</span>
                 </div>
             </div>
+
             <div id="attachmentContainer"></div>
         </div>
 
-        <!-- 3. 件名・本文カード -->
+        <!-- 3. 件名・本文確認カード -->
         <div class="card">
-            <div class="card-title">
+            <div class="card-header">
                 <span>📝 件名・本文確認</span>
-                <button id="btnToggleBody" class="refresh-button" style="font-size: 11px; padding: 2px 6px;">本文を隠す</button>
+                <button id="btnToggleBody" class="btn-refresh" style="font-size: 11px; padding: 2px 6px;">本文を隠す</button>
             </div>
             <div style="font-size: 11px; color: #8a8886; font-weight: 700; margin-bottom: 2px;">件名</div>
             <div id="subjectText" class="subject-text"></div>
@@ -92,20 +371,20 @@
             </div>
         </div>
 
-        <!-- 4. チェックリストカード -->
+        <!-- 4. 送信前チェック項目 (Thunderbirdライク) -->
         <div class="card checklist-card">
-            <div class="checklist-title">
-                <span>✅ 送信前チェック項目 (必須)</span>
-                <button id="btnSelectAll" type="button" class="refresh-button" style="margin-left: auto; font-size: 11px; padding: 2px 6px;">すべてチェック</button>
+            <div class="checklist-header">
+                <span>✅ 送信前チェック項目 (全項目必須)</span>
+                <button id="btnSelectAll" type="button" class="btn-refresh" style="font-size: 11px; padding: 2px 6px;">すべてチェック</button>
             </div>
             <div class="checklist-items">
                 <label class="check-label">
                     <input type="checkbox" id="chkTo" class="chk-item" />
-                    <span class="check-text">宛先を確認しました</span>
+                    <span class="check-text">宛先（To）を確認しました</span>
                 </label>
                 <label class="check-label">
                     <input type="checkbox" id="chkCcBcc" class="chk-item" />
-                    <span class="check-text">CC/BCCを確認しました</span>
+                    <span class="check-text">CC / BCC を確認しました</span>
                 </label>
                 <label class="check-label">
                     <input type="checkbox" id="chkAttachment" class="chk-item" />
@@ -123,17 +402,15 @@
         </div>
     </main>
 
-    <!-- 固定フッター -->
     <footer id="footerActions" class="footer-actions" style="display: none;">
         <button id="btnCancel" type="button" class="btn btn-secondary">キャンセル (送信中止)</button>
         <button id="btnConfirm" type="button" class="btn btn-primary" disabled>確認完了 (送信許可)</button>
     </footer>
 
-    <!-- スクリプト -->
     <script>
         var CONFIRMATION_KEY = "send_confirmation_verified";
         var CONFIRMATION_TIME_KEY = "send_confirmation_timestamp";
-        var ATTACHMENT_KEYWORDS = ["添付", "送付", "別紙", "別添", "添えて", "ご査収", "ファイル", "attached", "attachment", "enclosed"];
+        var ATTACHMENT_KEYWORDS = ["添付", "送付", "別紙", "別添", "添えて", "ご査収", "ファイル", "attached", "attachment", "enclosed", "please find"];
 
         var chkTo = document.getElementById("chkTo");
         var chkCcBcc = document.getElementById("chkCcBcc");
@@ -203,13 +480,13 @@
 
             var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
             if (!item) {
-                // ブラウザ単体テスト時のダミーデータ
+                // ブラウザ直接アクセス時のダミープレビュー
                 renderData({
-                    to: [{ displayName: "山田 太郎", emailAddress: "taro.yamada@example.com", isExternal: true }],
-                    cc: [{ displayName: "社内 課長", emailAddress: "kachou@mycompany.co.jp", isExternal: false }],
+                    to: [{ displayName: "山田 太郎", emailAddress: "taro.yamada@external-client.jp", isExternal: true }],
+                    cc: [{ displayName: "自社 課長", emailAddress: "manager@mycompany.co.jp", isExternal: false }],
                     bcc: [],
                     subject: "業務連絡とお見積書の件",
-                    bodyPreview: "お世話になっております。本件の資料を添付にて送付いたしますのでご査収ください。",
+                    bodyPreview: "お世話になっております。本件の資料を添付にて送付いたしますのでご確認よろしくお願いいたします。",
                     attachments: [],
                     hasExternal: true,
                     externalCount: 1,
@@ -283,14 +560,16 @@
             document.getElementById("mainView").style.display = "flex";
             document.getElementById("footerActions").style.display = "flex";
 
-            // 宛先
             var totalRecipients = data.to.length + data.cc.length + data.bcc.length;
             document.getElementById("recipientTotalCount").textContent = "合計: " + totalRecipients + " 名";
+
+            var badgeMultiple = document.getElementById("badgeMultiple");
+            badgeMultiple.style.display = totalRecipients >= 3 ? "inline-block" : "none";
 
             var extAlert = document.getElementById("externalAlert");
             if (data.hasExternal) {
                 extAlert.style.display = "flex";
-                document.getElementById("externalAlertText").textContent = "社外宛先が " + data.externalCount + " 件含まれています。";
+                document.getElementById("externalAlertText").textContent = "社外メールアドレスが " + data.externalCount + " 件含まれています。送信先を十分ご確認ください。";
             } else {
                 extAlert.style.display = "none";
             }
@@ -301,7 +580,7 @@
                 if (!list || list.length === 0) return;
                 var groupDiv = document.createElement("div");
                 groupDiv.className = "recipient-group";
-                groupDiv.innerHTML = '<span class="recipient-type-label">' + title + ' (' + list.length + ')</span>';
+                groupDiv.innerHTML = '<span class="recipient-label">' + title + ' (' + list.length + ')</span>';
                 var listDiv = document.createElement("div");
                 listDiv.className = "recipient-list";
                 list.forEach(function(r) {
@@ -315,14 +594,13 @@
                 recContainer.appendChild(groupDiv);
             }
             if (totalRecipients === 0) {
-                recContainer.innerHTML = '<div class="no-attachments">宛先が指定されていません。</div>';
+                recContainer.innerHTML = '<div class="empty-hint">宛先が指定されていません。</div>';
             } else {
                 renderGroup("TO (宛先)", data.to);
                 renderGroup("CC", data.cc);
                 renderGroup("BCC", data.bcc);
             }
 
-            // 添付
             var attAlert = document.getElementById("attachmentAlert");
             attAlert.style.display = data.potentialMissingAttachment ? "flex" : "none";
             var validAtts = (data.attachments || []).filter(function(a) { return !a.isInline; });
@@ -330,29 +608,28 @@
 
             var attContainer = document.getElementById("attachmentContainer");
             if (validAtts.length === 0) {
-                attContainer.innerHTML = '<div class="no-attachments">' + (data.potentialMissingAttachment ? "ファイルが添付されていません。" : "添付ファイルはありません。") + '</div>';
+                attContainer.innerHTML = '<div class="empty-hint">' + (data.potentialMissingAttachment ? "ファイルが添付されていません（添付忘れ注意）。" : "添付ファイルはありません。") + '</div>';
             } else {
                 var attListDiv = document.createElement("div");
                 attListDiv.className = "attachment-list";
                 validAtts.forEach(function(a) {
                     var aDiv = document.createElement("div");
                     aDiv.className = "attachment-item";
-                    aDiv.innerHTML = '<span class="attachment-icon">📄</span><span class="attachment-name">' + a.name + '</span><span class="attachment-size">' + formatSize(a.size) + '</span>';
+                    aDiv.innerHTML = '<span style="font-size:16px;">📄</span><span class="attachment-name">' + a.name + '</span><span class="attachment-size">' + formatSize(a.size) + '</span>';
                     attListDiv.appendChild(aDiv);
                 });
                 attContainer.innerHTML = "";
                 attContainer.appendChild(attListDiv);
             }
 
-            // 件名・本文
             var subj = data.subject || "";
-            document.getElementById("subjectText").textContent = subj.trim() ? subj : "（件名なし）";
+            document.getElementById("subjectText").textContent = subj.trim() ? subj : "（件名なし - 無題）";
             document.getElementById("bodyPreviewText").textContent = data.bodyPreview ? data.bodyPreview : "（本文は空です）";
         }
 
         btnRefresh.addEventListener("click", loadMailData);
 
-        // 送信許可処理
+        // 確認完了（送信許可）
         btnConfirm.addEventListener("click", function() {
             if (btnConfirm.disabled) return;
             var item = (typeof Office !== "undefined" && Office.context && Office.context.mailbox) ? Office.context.mailbox.item : null;
@@ -365,18 +642,18 @@
                         props.saveAsync(function() {
                             bannerSuccess.style.display = "flex";
                             bannerCancel.style.display = "none";
-                            btnConfirm.textContent = "✓ 確認完了済み";
+                            btnConfirm.textContent = "✓ 確認完了 (送信可能)";
                         });
                     }
                 });
             } else {
                 bannerSuccess.style.display = "flex";
                 bannerCancel.style.display = "none";
-                btnConfirm.textContent = "✓ 確認完了済み";
+                btnConfirm.textContent = "✓ 確認完了 (送信可能)";
             }
         });
 
-        // 送信中止処理
+        // キャンセル（送信中止）
         btnCancel.addEventListener("click", function() {
             checkboxes.forEach(function(c) { c.checked = false; });
             checkValidation();
