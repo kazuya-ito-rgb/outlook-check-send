@@ -1,75 +1,74 @@
 /* global Office */
 
-var CONFIRMATION_KEY = "send_confirmation_verified";
-var CONFIRMATION_TIME_KEY = "send_confirmation_timestamp";
+// 確認済みフラグは item.sessionData（要件セット1.14）に「確認時刻(ms)」として保存する
+var CONFIRMATION_KEY = "send_confirmation_timestamp";
+var VALID_MS = 5 * 60 * 1000;      // 確認の有効期限: 5分
+var CHECK_TIMEOUT_MS = 4000;       // 確認処理の打ち切り時間（応答がない場合に必ず結果を返す）
+
+var BLOCK_MESSAGE =
+    "【誤送信防止：送信前確認が完了していません】\n\n" +
+    "リボンの「送信前確認画面」を開き、5項目にチェックして「確認完了 (送信許可)」を押してから、再度「送信」してください。";
 
 /**
- * 送信確認が完了しているか判定（有効期限: 5分以内）
+ * 確認時刻を読み出す。取得できなければ null を返す。
  */
-function isSendConfirmed(item) {
-    return new Promise(function(resolve) {
-        try {
-            item.loadCustomPropertiesAsync(function(result) {
-                if (result.status === Office.AsyncResultStatus.Succeeded) {
-                    var customProps = result.value;
-                    var verified = customProps.get(CONFIRMATION_KEY);
-                    var timestamp = customProps.get(CONFIRMATION_TIME_KEY);
-                    if (verified === true && timestamp) {
-                        var elapsed = Date.now() - Number(timestamp);
-                        if (elapsed < 5 * 60 * 1000) {
-                            resolve(true);
-                            return;
-                        }
-                    }
-                    resolve(false);
+function readConfirmTime(item, cb) {
+    try {
+        if (item && item.sessionData && item.sessionData.getAsync) {
+            item.sessionData.getAsync(CONFIRMATION_KEY, function (r) {
+                if (r.status === Office.AsyncResultStatus.Succeeded && r.value) {
+                    cb(Number(r.value));
                 } else {
-                    resolve(false);
+                    cb(null);
                 }
             });
-        } catch (e) {
-            resolve(false);
+        } else {
+            cb(null);
         }
-    });
+    } catch (e) {
+        cb(null);
+    }
 }
 
 /**
  * OnMessageSend イベントハンドラー（Smart Alerts）
+ * どの経路でも event.completed を一度だけ必ず呼ぶ。
  */
 function onMessageSendHandler(event) {
+    var finished = false;
+    var timer = null;
+
+    function finish(options) {
+        if (finished) { return; }
+        finished = true;
+        if (timer) { clearTimeout(timer); }
+        event.completed(options);
+    }
+
+    // 応答が返らない場合でも「処理中」のまま止まらないようにする
+    timer = setTimeout(function () {
+        finish({
+            allowEvent: false,
+            errorMessage: "送信前確認の状態を取得できませんでした。もう一度「送信」を押してください。繰り返す場合は「送信前確認画面」で再度「確認完了」を押してください。",
+            cancelLabel: "メール作成に戻る"
+        });
+    }, CHECK_TIMEOUT_MS);
+
     try {
         var item = Office.context.mailbox.item;
         if (!item) {
-            event.completed({ allowEvent: true });
+            finish({ allowEvent: false, errorMessage: BLOCK_MESSAGE, cancelLabel: "メール作成に戻る" });
             return;
         }
-
-        isSendConfirmed(item).then(function(confirmed) {
-            if (confirmed) {
-                // 確認完了済み -> 送信許可
-                event.completed({ allowEvent: true });
+        readConfirmTime(item, function (ts) {
+            if (ts && (Date.now() - ts) >= 0 && (Date.now() - ts) < VALID_MS) {
+                finish({ allowEvent: true });
             } else {
-                // 未確認 -> 送信をブロックし、確認を要求
-                var msg = "【誤送信防止：送信前確認が完了していません】\n\n" +
-                          "メール作成画面の上部リボンにある「送信前確認画面」を開き、宛先・社外アドレス・添付ファイル・件名・本文の5項目を確認してチェックを入れてください。\n\n" +
-                          "「確認完了 (送信許可)」ボタンを押した後、再度「送信」を行ってください。";
-
-                event.completed({
-                    allowEvent: false,
-                    errorMessage: msg,
-                    cancelLabel: "メール作成に戻る"
-                });
+                finish({ allowEvent: false, errorMessage: BLOCK_MESSAGE, cancelLabel: "メール作成に戻る" });
             }
-        }).catch(function(err) {
-            event.completed({
-                allowEvent: false,
-                errorMessage: "送信確認の検証中にエラーが発生しました。"
-            });
         });
     } catch (err) {
-        event.completed({
-            allowEvent: false,
-            errorMessage: "送信確認処理中に例外が発生しました。"
-        });
+        finish({ allowEvent: false, errorMessage: "送信確認処理中にエラーが発生しました。もう一度お試しください。" });
     }
 }
 
@@ -77,8 +76,6 @@ function onMessageSendHandler(event) {
 if (typeof Office !== "undefined" && Office.actions && Office.actions.associate) {
     Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
 }
-
-// グローバルスコープにも定義
 if (typeof window !== "undefined") {
     window.onMessageSendHandler = onMessageSendHandler;
 }
